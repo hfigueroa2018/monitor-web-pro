@@ -2,28 +2,33 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Monitor Pro</title>
+  <title>Dashboard Monitor Pro</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body{font-family:Arial,Helvetica,sans-serif;margin:40px;background:#f7f7f7;}
     h1,h2{color:#333;}
-    .card{background:#fff;padding:20px;border-radius:8px;margin-bottom:20px;}
+    .card{background:#fff;padding:20px;border-radius:8px;margin-bottom:20px;box-shadow:0 2px 4px rgba(0,0,0,.1);}
     .stat{font-size:24px;font-weight:bold;}
     .up{color:green}.down{color:red}
     table{width:100%;border-collapse:collapse;margin-top:10px;}
     th,td{padding:8px;border:1px solid #ccc;text-align:center;}
     th{background:#eee}
     canvas{max-height:300px}
+    #progressBar{width:100%;background:#eee;border-radius:4px;margin:10px 0;}
+    #progress{height:20px;background:#4caf50;width:0%;border-radius:4px;transition:width .2s}
+    select,button{padding:6px 10px;margin-right:6px}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <h1>Dashboard de Monitoreo</h1>
 
+  <!-- CONFIGURACIÓN -->
   <div class="card">
     <h2>Configuración</h2>
-    <form action="/config" method="post">
+    <form id="configForm">
       <label>Frecuencia:
-        <select name="freq">
+        <select id="freq">
           <option value="20">20 segundos</option>
           <option value="60">1 minuto</option>
           <option value="300">5 minutos</option>
@@ -31,12 +36,13 @@
           <option value="1800">30 minutos</option>
         </select>
       </label>
-      <button name="action" value="start">Iniciar</button>
-      <button name="action" value="stop">Detener</button>
+      <button type="button" id="btnStart">Iniciar monitoreo</button>
+      <button type="button" id="btnStop">Detener monitoreo</button>
     </form>
-    <p>Estado: <strong id="status">Cargando...</strong></p>
+    <p>Estado: <strong id="status">Detenido</strong></p>
   </div>
 
+  <!-- AGREGAR SITIO -->
   <div class="card">
     <h2>Agregar sitio</h2>
     <form id="addForm">
@@ -45,6 +51,7 @@
     </form>
   </div>
 
+  <!-- TABLA DE SITIOS -->
   <div class="card">
     <h2>Sitios monitoreados</h2>
     <table>
@@ -55,66 +62,109 @@
     </table>
   </div>
 
+  <!-- GRÁFICO DE TIEMPOS DE RESPUESTA -->
   <div class="card">
     <h2>Tiempo de respuesta (última hora)</h2>
     <canvas id="responseChart"></canvas>
   </div>
 
+  <!-- BARRA ANIMADA (oculta por defecto) -->
+  <div id="progressBar" style="display:none;">
+    <div id="progress"></div>
+  </div>
+  <p id="result"></p>
+
   <script>
-    // Carga inicial
-    async function loadSites() {
+    // ---------- UTILS ----------
+    async function getSites() {
       const res = await fetch("/sites");
-      const sites = await res.json();
+      return res.ok ? res.json() : [];
+    }
+    async function getMetrics(url, days = 1) {
+      const res = await fetch(`/metrics/${encodeURIComponent(url)}?days=${days}`);
+      return res.ok ? res.json() : { uptime: 0, incidents: 0, response: { avg: 0, min: 0, max: 0 } };
+    }
+    async function checkSiteNow(url) {
+      const bar = document.getElementById("progressBar");
+      const prog = document.getElementById("progress");
+      const resText = document.getElementById("result");
+      bar.style.display = "block";
+      prog.style.width = "0%";
+      resText.textContent = "Revisando...";
+      for (let i = 0; i <= 100; i += 10) {
+        prog.style.width = i + "%";
+        await new Promise(r => setTimeout(r, 100));
+      }
+      const resp = await fetch("/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+      });
+      const data = await resp.json();
+      resText.textContent = data.message;
+      prog.style.backgroundColor = data.status === "ok" ? "#4caf50" : "#f44336";
+      setTimeout(() => { bar.style.display = "none"; loadAll(); }, 1000);
+    }
+    async function loadAll() {
+      const sites = await getSites();
       const tbody = document.getElementById("sitesTable");
       tbody.innerHTML = "";
       for (const site of sites) {
-        const m = await (await fetch(`/metrics/${encodeURIComponent(site)}?days=1`)).json();
+        const m = await getMetrics(site, 1);
         const row = tbody.insertRow();
         row.innerHTML = `
           <td>${site}</td>
           <td class="${m.incidents ? 'down' : 'up'}">${m.incidents ? '❌ Down' : '✅ Up'}</td>
-          <td>${m.uptime}%</td>
+          <td>${m.uptime_percent}%</td>
           <td>${m.incidents}</td>
           <td>${m.response.avg} ms</td>
-          <td><button onclick="testSite('${site}')">Probar</button></td>
+          <td><button onclick="checkSiteNow('${site}')">Probar</button></td>
         `;
       }
-    }
-
-    async function testSite(url) {
-      await fetch("/check", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({url})
-      });
-      loadSites();
-    }
-
-    async function loadChart() {
-      const sites = await (await fetch("/sites")).json();
+      // Gráfico
+      const canvas = document.getElementById("responseChart");
       const datasets = [];
       const labels = [];
       for (const site of sites) {
-        const data = await (await fetch(`/metrics/${encodeURIComponent(site)}?days=1`)).json();
-        const times = data.response.times || [];
+        const m = await getMetrics(site, 1);
         datasets.push({
           label: site,
-          data: times,
+          data: [m.response.avg],
           fill: false,
           tension: 0.1
         });
-        if (labels.length === 0) labels.push(...Array(times.length).fill(0).map((_, i) => i));
+        if (labels.length === 0) labels.push("Ahora");
       }
-      new Chart(document.getElementById("responseChart"), {
+      new Chart(canvas, {
         type: "line",
-        data: {labels, datasets},
-        options: {responsive: true, scales: {y: {beginAtZero: true, title: {display: true, text: "ms"}}}}
+        data: { labels, datasets },
+        options: { responsive: true, scales: { y: { beginAtZero: true, title: { display: true, text: "ms" } } } }
       });
     }
 
-    // Carga inicial
-    loadSites();
-    loadChart();
+    // ---------- CONFIG ----------
+    document.getElementById("btnStart").onclick = async () => {
+      const freq = document.getElementById("freq").value;
+      await fetch("/config", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `action=start&freq=${freq}` });
+      document.getElementById("status").textContent = "Monitoreando";
+    };
+    document.getElementById("btnStop").onclick = async () => {
+      await fetch("/config", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "action=stop&freq=60" });
+      document.getElementById("status").textContent = "Detenido";
+    };
+
+    // ---------- AGREGAR SITIO ----------
+    document.getElementById("addForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const url = document.getElementById("urlInput").value.trim();
+      if (!url) return;
+      await fetch("/add", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `url=${url}` });
+      document.getElementById("urlInput").value = "";
+      loadAll();
+    });
+
+    // ---------- CARGA INICIAL ----------
+    loadAll();
   </script>
 </body>
 </html>
