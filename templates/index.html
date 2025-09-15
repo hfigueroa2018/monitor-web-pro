@@ -75,6 +75,9 @@
   <p id="result"></p>
 
   <script>
+    // ---------- VARIABLE GLOBAL DEL GRÁFICO ----------
+    let responseChart;
+
     // ---------- UTILS ----------
     async function getSites() {
       const res = await fetch("/sites");
@@ -105,10 +108,19 @@
       prog.style.backgroundColor = data.status === "ok" ? "#4caf50" : "#f44336";
       setTimeout(() => { bar.style.display = "none"; loadAll(); }, 1000);
     }
+
     async function loadAll() {
       const sites = await getSites();
       const tbody = document.getElementById("sitesTable");
       tbody.innerHTML = "";
+
+      // Destruye gráfico previo si existe
+      if (responseChart) {
+        responseChart.destroy();
+      }
+
+      const datasets = [];
+      const labels = [];
       for (const site of sites) {
         const m = await getMetrics(site, 1);
         const row = tbody.insertRow();
@@ -120,13 +132,6 @@
           <td>${m.response.avg} ms</td>
           <td><button onclick="checkSiteNow('${site}')">Probar</button></td>
         `;
-      }
-      // Gráfico
-      const canvas = document.getElementById("responseChart");
-      const datasets = [];
-      const labels = [];
-      for (const site of sites) {
-        const m = await getMetrics(site, 1);
         datasets.push({
           label: site,
           data: [m.response.avg],
@@ -135,7 +140,9 @@
         });
         if (labels.length === 0) labels.push("Ahora");
       }
-      new Chart(canvas, {
+
+      const ctx = document.getElementById("responseChart");
+      responseChart = new Chart(ctx, {
         type: "line",
         data: { labels, datasets },
         options: { responsive: true, scales: { y: { beginAtZero: true, title: { display: true, text: "ms" } } } }
@@ -158,9 +165,19 @@
       e.preventDefault();
       const url = document.getElementById("urlInput").value.trim();
       if (!url) return;
-      await fetch("/add", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `url=${url}` });
-      document.getElementById("urlInput").value = "";
-      loadAll();
+
+      const res = await fetch("/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `url=${encodeURIComponent(url)}`
+      });
+
+      if (res.ok) {
+        document.getElementById("urlInput").value = "";
+        await loadAll();  // recarga tabla y gráfico
+      } else {
+        alert("Error al agregar sitio");
+      }
     });
 
     // ---------- CARGA INICIAL ----------
