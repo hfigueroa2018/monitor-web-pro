@@ -3,19 +3,80 @@
 <head>
   <meta charset="utf-8">
   <title>Monitor Web</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    #progressBar {
+      width: 100%;
+      background-color: #eee;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    #progress {
+      height: 20px;
+      background: #4caf50;
+      width: 0%;
+      border-radius: 4px;
+      transition: width 0.2s;
+    }
+  </style>
 </head>
 <body>
   <h1>Monitor de Sitios Web</h1>
-  <form action="/add" method="post">
-    <input type="url" name="url" placeholder="https://tusitio.com" required>
+
+  <form id="addForm">
+    <input type="url" name="url" id="urlInput" placeholder="https://tusitio.com" required>
     <button type="submit">Agregar</button>
   </form>
-  <ul>
+
+  <ul id="siteList">
     {% for site in sites %}
-      <li>{{ site }}</li>
+      <li>
+        {{ site }}
+        <button onclick="testSite('{{ site }}')">Probar ahora</button>
+      </li>
     {% endfor %}
   </ul>
-  <a href="/check">Verificar ahora</a>
+
+  <div id="progressBar" style="display:none;">
+    <div id="progress"></div>
+  </div>
+  <p id="result"></p>
+
+  <script>
+    // Agregar sitio sin recargar
+    document.getElementById('addForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+      await fetch('/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({url})
+      });
+      location.reload();
+    });
+
+    // Probar sitio con barra animada
+    async function testSite(url) {
+      const bar = document.getElementById('progressBar');
+      const prog = document.getElementById('progress');
+      const res = document.getElementById('result');
+      bar.style.display = 'block';
+      prog.style.width = '0%';
+      res.textContent = 'Revisando...';
+      for (let i = 0; i <= 100; i += 10) {
+        prog.style.width = i + '%';
+        await new Promise(r => setTimeout(r, 100));
+      }
+      const resp = await fetch('/check', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url})
+      });
+      const data = await resp.json();
+      res.textContent = data.message;
+      prog.style.backgroundColor = data.status === 'ok' ? '#4caf50' : '#f44336';
+    }
+  </script>
 </body>
 </html>
