@@ -2,146 +2,119 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Monitor Web</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>Monitor Pro</title>
   <style>
-    #progressBar {
-      width: 100%;
-      background-color: #eee;
-      border-radius: 4px;
-      margin: 10px 0;
-    }
-    #progress {
-      height: 20px;
-      background: #4caf50;
-      width: 0%;
-      border-radius: 4px;
-      transition: width 0.2s;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      padding: 8px 12px;
-      border: 1px solid #ccc;
-      text-align: center;
-    }
-    th {
-      background-color: #f5f5f5;
-    }
-    .config-box {
-      border: 1px solid #ccc;
-      padding: 15px;
-      margin-bottom: 20px;
-      border-radius: 6px;
-    }
+    body{font-family:Arial,Helvetica,sans-serif;margin:40px;background:#f7f7f7;}
+    h1,h2{color:#333;}
+    .card{background:#fff;padding:20px;border-radius:8px;margin-bottom:20px;}
+    .stat{font-size:24px;font-weight:bold;}
+    .up{color:green}.down{color:red}
+    table{width:100%;border-collapse:collapse;margin-top:10px;}
+    th,td{padding:8px;border:1px solid #ccc;text-align:center;}
+    th{background:#eee}
+    canvas{max-height:300px}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <h1>Monitor de Sitios Web</h1>
+  <h1>Dashboard de Monitoreo</h1>
 
-  <div class="config-box">
-    <h3>Configuración</h3>
+  <div class="card">
+    <h2>Configuración</h2>
     <form action="/config" method="post">
-      <label>Frecuencia de monitoreo:
+      <label>Frecuencia:
         <select name="freq">
-          <option value="20" {% if freq == 20 %}selected{% endif %}>20 segundos</option>
-          <option value="60" {% if freq == 60 %}selected{% endif %}>1 minuto</option>
-          <option value="600" {% if freq == 600 %}selected{% endif %}>10 minutos</option>
-          <option value="1800" {% if freq == 1800 %}selected{% endif %}>30 minutos</option>
+          <option value="20">20 segundos</option>
+          <option value="60">1 minuto</option>
+          <option value="300">5 minutos</option>
+          <option value="600">10 minutos</option>
+          <option value="1800">30 minutos</option>
         </select>
       </label>
-      <button type="submit" name="action" value="start">Iniciar monitoreo</button>
-      <button type="submit" name="action" value="stop">Detener monitoreo</button>
+      <button name="action" value="start">Iniciar</button>
+      <button name="action" value="stop">Detener</button>
     </form>
-    <p>Estado: <strong>{{ "🟢 Monitoreando" if monitoring else "🔴 Detenido" }}</strong></p>
+    <p>Estado: <strong id="status">Cargando...</strong></p>
   </div>
 
-  <form id="addForm">
-    <input type="url" name="url" id="urlInput" placeholder="https://tusitio.com" required>
-    <button type="submit">Agregar</button>
-  </form>
-
-  <ul id="siteList">
-    {% for site in sites %}
-      <li>
-        {{ site }}
-        <button onclick="testSite('{{ site }}')">Probar ahora</button>
-      </li>
-    {% endfor %}
-  </ul>
-
-  <div id="progressBar" style="display:none;">
-    <div id="progress"></div>
+  <div class="card">
+    <h2>Agregar sitio</h2>
+    <form id="addForm">
+      <input type="url" id="urlInput" placeholder="https://tusitio.com" required>
+      <button type="submit">Agregar</button>
+    </form>
   </div>
-  <p id="result"></p>
 
-  <h2>Estado actual</h2>
-  <table>
-    <thead>
-      <tr><th>Sitio</th><th>Estado</th><th>Uptime 24h</th><th>Tiempo activo</th></tr>
-    </thead>
-    <tbody>
-      {% for site in sites %}
-        <tr>
-          <td>{{ site }}</td>
-          <td id="st-{{ loop.index }}">Cargando...</td>
-          <td id="up-{{ loop.index }}">-</td>
-          <td id="tot-{{ loop.index }}">-</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="card">
+    <h2>Sitios monitoreados</h2>
+    <table>
+      <thead>
+        <tr><th>Sitio</th><th>Estado</th><th>Uptime 24h</th><th>Incidentes</th><th>Tiempo de respuesta</th><th>Acciones</th></tr>
+      </thead>
+      <tbody id="sitesTable"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Tiempo de respuesta (última hora)</h2>
+    <canvas id="responseChart"></canvas>
+  </div>
 
   <script>
-    // Agregar sitio sin recargar
-    document.getElementById('addForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const url = document.getElementById('urlInput').value.trim();
-      if (!url) return;
-      await fetch('/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({url})
-      });
-      location.reload();
-    });
-
-    // Probar sitio con barra animada
-    async function testSite(url) {
-      const bar = document.getElementById('progressBar');
-      const prog = document.getElementById('progress');
-      const res = document.getElementById('result');
-      bar.style.display = 'block';
-      prog.style.width = '0%';
-      res.textContent = 'Revisando...';
-      for (let i = 0; i <= 100; i += 10) {
-        prog.style.width = i + '%';
-        await new Promise(r => setTimeout(r, 100));
+    // Carga inicial
+    async function loadSites() {
+      const res = await fetch("/sites");
+      const sites = await res.json();
+      const tbody = document.getElementById("sitesTable");
+      tbody.innerHTML = "";
+      for (const site of sites) {
+        const m = await (await fetch(`/metrics/${encodeURIComponent(site)}?days=1`)).json();
+        const row = tbody.insertRow();
+        row.innerHTML = `
+          <td>${site}</td>
+          <td class="${m.incidents ? 'down' : 'up'}">${m.incidents ? '❌ Down' : '✅ Up'}</td>
+          <td>${m.uptime}%</td>
+          <td>${m.incidents}</td>
+          <td>${m.response.avg} ms</td>
+          <td><button onclick="testSite('${site}')">Probar</button></td>
+        `;
       }
-      const resp = await fetch('/check', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({url})
-      });
-      const data = await resp.json();
-      res.textContent = data.message;
-      prog.style.backgroundColor = data.status === 'ok' ? '#4caf50' : '#f44336';
-      setTimeout(() => location.reload(), 1000);
     }
 
-    // Cargar uptime al abrir
-    {% for site in sites %}
-      fetch("/uptime/{{ site|urlencode }}")
-        .then(r => r.json())
-        .then(d => {
-          document.getElementById('st-{{ loop.index }}').innerText = d.status === 'up' ? '✅ Up' : '❌ Down';
-          document.getElementById('up-{{ loop.index }}').innerText = d.uptime_percent + ' %';
-          document.getElementById('tot-{{ loop.index }}').innerText = d.total_uptime;
+    async function testSite(url) {
+      await fetch("/check", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({url})
+      });
+      loadSites();
+    }
+
+    async function loadChart() {
+      const sites = await (await fetch("/sites")).json();
+      const datasets = [];
+      const labels = [];
+      for (const site of sites) {
+        const data = await (await fetch(`/metrics/${encodeURIComponent(site)}?days=1`)).json();
+        const times = data.response.times || [];
+        datasets.push({
+          label: site,
+          data: times,
+          fill: false,
+          tension: 0.1
         });
-    {% endfor %}
+        if (labels.length === 0) labels.push(...Array(times.length).fill(0).map((_, i) => i));
+      }
+      new Chart(document.getElementById("responseChart"), {
+        type: "line",
+        data: {labels, datasets},
+        options: {responsive: true, scales: {y: {beginAtZero: true, title: {display: true, text: "ms"}}}}
+      });
+    }
+
+    // Carga inicial
+    loadSites();
+    loadChart();
   </script>
 </body>
 </html>
