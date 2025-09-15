@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, abort
-from flask_cors import CORS  # pip install flask-cors si no lo tienes
+from flask_cors import CORS
 from metrics import uptime_range, incidents_range, response_time_stats
 from uptime import uptime_percent
 from monitor import check_site
@@ -8,7 +8,7 @@ import json
 import os
 
 app = Flask(__name__)
-CORS(app)  # elimina esta línea si no necesitas CORS
+CORS(app)
 
 # ---------- PÁGINA PRINCIPAL ----------
 @app.route("/")
@@ -27,30 +27,35 @@ def get_sites():
             abort(500, description=f"Error leyendo sitios: {str(e)}")
     return jsonify([])
 
-# ---------- AÑADIR SITIO (FALTA CORREGIR) ----------
+# ---------- AÑADIR SITIO (CORREGIDO: guardar ANTES de chequear) ----------
 @app.route("/add", methods=["POST"])
 def add_site():
-    # Acepta form-data o JSON
-    url = (request.form.get("url") or
-           (request.json and request.json.get("url")))
-    if not url:
-        abort(400, description="URL requerida")
+    try:
+        url = (request.form.get("url") or
+               (request.json and request.json.get("url")))
+        if not url:
+            abort(400, description="URL requerida")
 
-    url = url.strip()
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
+        url = url.strip()
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
 
-    sites = load_sites()
-    if url in sites:
-        return jsonify({"status": "ok", "message": "Sitio ya existe"}), 200
+        sites = load_sites()
+        if url in sites:
+            return jsonify({"status": "ok", "message": "Sitio ya existe"}), 200
 
-    sites.append(url)
-    save_sites(sites)
+        # 1. Guardar primero
+        sites.append(url)
+        save_sites(sites)
 
-    # Chequeo inmediato
-    check_site(url)
+        # 2. Chequear después (opcional)
+        check_site(url)
 
-    return jsonify({"status": "ok", "message": "Sitio añadido y probado"})
+        return jsonify({"status": "ok", "message": "Sitio añadido y probado"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        abort(500, description=str(e))
 
 # ---------- CONFIGURAR FRECUENCIA ----------
 @app.route("/config", methods=["POST"])
@@ -72,7 +77,7 @@ def check_site_now():
     ok = check_site(url)
     return jsonify({"status": "ok" if ok else "fail", "message": "Online" if ok else "Fallido"})
 
-# ---------- MÉTRICAS (1 día por defecto) ----------
+# ---------- MÉTRICAS ----------
 @app.route("/metrics/<path:url>")
 def metrics_data(url):
     from urllib.parse import unquote
@@ -86,46 +91,6 @@ def metrics_data(url):
         "response": response_time_stats(url, days),
         "uptime_percent": uptime_percent(url)
     })
-
-# ---------- MÉTRICAS PARA CUALQUIER RANGO ----------
-@app.route("/metrics/<path:url>/range")
-def metrics_range(url):
-    from urllib.parse import unquote
-    url = unquote(url)
-    days = int(request.args.get("days", 1))
-    if days <= 0 or days > 365:
-        days = 1
-    return jsonify({
-        "uptime": uptime_range(url, days),
-        "incidents": incidents_range(url, days),
-        "response": response_time_stats(url, days)
-    })
-
-# ---------- ÚLTIMA CAÍDA ----------
-@app.route("/last_down/<path:url>")
-def last_down(url):
-    from urllib.parse import unquote
-    from metrics import load_metrics
-    url = unquote(url)
-    data = load_metrics().get(url, [])
-    for entry in reversed(data):
-        if entry["status"] == "down":
-            return jsonify({"last_down": entry["time"]})
-    return jsonify({"last_down": None})
-
-# ---------- ALERTA POR LENTITUD ----------
-@app.route("/slow_alert", methods=["POST"])
-def slow_alert():
-    from notifier import send_alert
-    data = request.get_json()
-    url = data.get("url")
-    threshold = int(request.args.get("threshold", 2000))
-    metrics = response_time_stats(url, 1)
-    if metrics["avg"] > threshold:
-        msg = f"⚠️ {url} está lento: {metrics['avg']} ms (promedio 24 h)"
-        send_alert(msg)
-        return jsonify({"alert_sent": True, "message": msg})
-    return jsonify({"alert_sent": False})
 
 # ---------- HANDLERS DE ERROR ----------
 @app.errorhandler(404)
