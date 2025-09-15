@@ -1,5 +1,11 @@
+import os
 from telegram_notifier import send_telegram
 
-def send_alert(message: str):
-    print("Enviando alerta por Telegram...")
-    send_telegram(message)
+DEFAULT_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+def send_alert(message: str, chat_id: str = None):
+    cid = chat_id or DEFAULT_CHAT_ID
+    if not cid:
+        print("Sin chat_id configurado")
+        return
+    send_telegram(message, cid)
