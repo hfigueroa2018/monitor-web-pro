@@ -1,0 +1,18 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 40px;
+  background-color: #f4f4f4;
+}
+
+h1 {
+  color: #333;
+}
+
+input[type="url"] {
+  width: 300px;
+  padding: 8px;
+}
+
+button {
+  padding: 8px 12px;
+}

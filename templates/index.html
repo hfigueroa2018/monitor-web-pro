@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Monitor Web</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <h1>Monitor de Sitios Web</h1>
+  <form action="/add" method="post">
+    <input type="url" name="url" placeholder="https://tusitio.com" required>
+    <button type="submit">Agregar</button>
+  </form>
+  <ul>
+    {% for site in sites %}
+      <li>{{ site }}</li>
+    {% endfor %}
+  </ul>
+  <a href="/check">Verificar ahora</a>
+</body>
+</html>
