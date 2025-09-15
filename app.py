@@ -1,4 +1,7 @@
+from flask import Flask, request, jsonify
 from metrics import uptime_range, incidents_range, response_time_stats
+
+app = Flask(__name__)
 
 @app.route("/metrics/<path:url>")
 def metrics_data(url):
