@@ -18,10 +18,46 @@
       border-radius: 4px;
       transition: width 0.2s;
     }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+    th {
+      background-color: #f5f5f5;
+    }
+    .config-box {
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
   <h1>Monitor de Sitios Web</h1>
+
+  <div class="config-box">
+    <h3>Configuración</h3>
+    <form action="/config" method="post">
+      <label>Frecuencia de monitoreo:
+        <select name="freq">
+          <option value="20" {% if freq == 20 %}selected{% endif %}>20 segundos</option>
+          <option value="60" {% if freq == 60 %}selected{% endif %}>1 minuto</option>
+          <option value="600" {% if freq == 600 %}selected{% endif %}>10 minutos</option>
+          <option value="1800" {% if freq == 1800 %}selected{% endif %}>30 minutos</option>
+        </select>
+      </label>
+      <button type="submit" name="action" value="start">Iniciar monitoreo</button>
+      <button type="submit" name="action" value="stop">Detener monitoreo</button>
+    </form>
+    <p>Estado: <strong>{{ "🟢 Monitoreando" if monitoring else "🔴 Detenido" }}</strong></p>
+  </div>
 
   <form id="addForm">
     <input type="url" name="url" id="urlInput" placeholder="https://tusitio.com" required>
@@ -41,6 +77,23 @@
     <div id="progress"></div>
   </div>
   <p id="result"></p>
+
+  <h2>Estado actual</h2>
+  <table>
+    <thead>
+      <tr><th>Sitio</th><th>Estado</th><th>Uptime 24h</th><th>Tiempo activo</th></tr>
+    </thead>
+    <tbody>
+      {% for site in sites %}
+        <tr>
+          <td>{{ site }}</td>
+          <td id="st-{{ loop.index }}">Cargando...</td>
+          <td id="up-{{ loop.index }}">-</td>
+          <td id="tot-{{ loop.index }}">-</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
   <script>
     // Agregar sitio sin recargar
@@ -76,7 +129,19 @@
       const data = await resp.json();
       res.textContent = data.message;
       prog.style.backgroundColor = data.status === 'ok' ? '#4caf50' : '#f44336';
+      setTimeout(() => location.reload(), 1000);
     }
+
+    // Cargar uptime al abrir
+    {% for site in sites %}
+      fetch("/uptime/{{ site|urlencode }}")
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('st-{{ loop.index }}').innerText = d.status === 'up' ? '✅ Up' : '❌ Down';
+          document.getElementById('up-{{ loop.index }}').innerText = d.uptime_percent + ' %';
+          document.getElementById('tot-{{ loop.index }}').innerText = d.total_uptime;
+        });
+    {% endfor %}
   </script>
 </body>
 </html>
