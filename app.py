@@ -7,16 +7,10 @@ import time
 
 app = Flask(__name__)
 
-# Frecuencia por defecto (segundos)
 DEFAULT_FREQ = 60
-
-# Variable global para controlar el hilo
 current_freq = DEFAULT_FREQ
 monitoring = False
 
-# ---------------------------
-# Rutas principales
-# ---------------------------
 @app.route("/")
 def index():
     sites = load_sites()
@@ -66,9 +60,6 @@ def uptime_data(url):
         "status": "up" if up == 100 else "down"
     }
 
-# ---------------------------
-# Monitoreo automático
-# ---------------------------
 def background_monitor():
     while True:
         if not monitoring:
@@ -81,8 +72,5 @@ def background_monitor():
 
 threading.Thread(target=background_monitor, daemon=True).start()
 
-# ---------------------------
-# Arranque
-# ---------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

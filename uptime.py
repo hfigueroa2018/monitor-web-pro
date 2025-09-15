@@ -1,7 +1,6 @@
-import time
 import json
+import time
 from datetime import datetime, timedelta
-from database import load_sites
 
 DB_FILE = "uptime.json"
 
@@ -24,7 +23,6 @@ def record_check(url: str, status_ok: bool):
         "time": datetime.utcnow().isoformat(),
         "status": "up" if status_ok else "down"
     })
-    # Mantener solo últimas 24 horas
     cutoff = datetime.utcnow() - timedelta(hours=24)
     data[url] = [x for x in data[url] if datetime.fromisoformat(x["time"]) > cutoff]
     save_uptime(data)
@@ -38,7 +36,6 @@ def uptime_percent(url: str) -> float:
     return round((ups / total) * 100, 2)
 
 def total_uptime_str(url: str) -> str:
-    # Calcula tiempo total "up" en segundos
     data = load_uptime()
     if url not in data or not data[url]:
         return "0 min"
