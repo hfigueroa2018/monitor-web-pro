@@ -5,7 +5,6 @@ from monitor import check_site
 from database import load_sites, save_sites
 import json
 import os
-import time
 
 app = Flask(__name__)
 
@@ -37,7 +36,6 @@ def get_sites():
 def config():
     freq = int(request.form.get("freq", 60))
     action = request.form.get("action", "stop")
-    # Guardamos en archivo temporal (puedes usar base de datos después)
     config_data = {"freq": freq, "action": action}
     with open("config.json", "w") as f:
         json.dump(config_data, f)
