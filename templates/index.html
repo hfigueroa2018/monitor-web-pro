@@ -184,7 +184,9 @@
           label: `${url} (UP)`,
           data: mapUp,
           borderWidth: 2,
-          spanGaps: false,
+          spanGaps: true,
+          showLine: true,
+          tension: 0.25,
           borderColor: '#2e7d32',
           backgroundColor: 'rgba(46,125,50,0.2)'
         });
@@ -192,7 +194,9 @@
           label: `${url} (DOWN)`,
           data: mapDown,
           borderWidth: 2,
-          spanGaps: false,
+          spanGaps: true,
+          showLine: true,
+          tension: 0.25,
           borderColor: '#c62828',
           backgroundColor: 'rgba(198,40,40,0.2)'
         });
@@ -206,7 +210,10 @@
         label: d.label,
         data: labels.map(ts => d.data[ts] ?? null),
         borderWidth: d.borderWidth,
-        spanGaps: d.spanGaps,
+        spanGaps: d.spanGaps ?? true,
+        showLine: d.showLine ?? true,
+        tension: d.tension ?? 0.25,
+        fill: false,
         borderColor: d.borderColor,
         backgroundColor: d.backgroundColor,
         pointRadius: 3
@@ -219,7 +226,9 @@
           label: 'Sin datos',
           data: labels.map(() => 0),
           borderWidth: 1,
-          spanGaps: false,
+          spanGaps: true,
+          showLine: true,
+          tension: 0.25,
           borderColor: '#999',
           backgroundColor: 'rgba(0,0,0,0.05)',
           pointRadius: 0
