@@ -141,13 +141,24 @@
         const series = await getSeries(url, 60);
         // recolectar labels (timestamps) únicos
         series.forEach(p => labelsSet.add(p.time));
-        // mapa rápido time->value
-        const map = series.reduce((acc, p) => (acc[p.time] = p.value, acc), {});
+        // mapas: up -> valor real, down -> 0ms
+        const mapUp = series.reduce((acc, p) => (acc[p.time] = (p.value ?? null), acc), {});
+        const mapDown = series.reduce((acc, p) => (acc[p.time] = (p.value == null ? 0 : null), acc), {});
         datasets.push({
-          label: url,
-          data: map,
+          label: `${url} (UP)`,
+          data: mapUp,
           borderWidth: 2,
           spanGaps: false,
+          borderColor: '#2e7d32',
+          backgroundColor: 'rgba(46,125,50,0.2)'
+        });
+        datasets.push({
+          label: `${url} (DOWN)`,
+          data: mapDown,
+          borderWidth: 2,
+          spanGaps: false,
+          borderColor: '#c62828',
+          backgroundColor: 'rgba(198,40,40,0.2)'
         });
       }
 
@@ -160,6 +171,9 @@
         data: labels.map(ts => d.data[ts] ?? null),
         borderWidth: d.borderWidth,
         spanGaps: d.spanGaps,
+        borderColor: d.borderColor,
+        backgroundColor: d.backgroundColor,
+        pointRadius: 2
       }));
 
       const ctx = document.getElementById("responseChart");
@@ -198,11 +212,15 @@
       const labels = Array.from(labelsSet).sort();
 
       const newDatasets = (responseChart.data.datasets || []).map(ds => {
-        const url = ds.label;
-        const map = (seriesByUrl[url] || []).reduce((acc, p) => (acc[p.time] = p.value, acc), {});
+        // obtener URL base del label (quita sufijo " (UP)" o " (DOWN)")
+        const urlBase = ds.label.replace(/ \(UP\)$| \(DOWN\)$/,'');
+        const series = seriesByUrl[urlBase] || [];
+        const mapUp = series.reduce((acc, p) => (acc[p.time] = (p.value ?? null), acc), {});
+        const mapDown = series.reduce((acc, p) => (acc[p.time] = (p.value == null ? 0 : null), acc), {});
+        const useMap = ds.label.endsWith('(DOWN)') ? mapDown : mapUp;
         return {
           ...ds,
-          data: labels.map(ts => map[ts] ?? null)
+          data: labels.map(ts => useMap[ts] ?? null)
         };
       });
 
