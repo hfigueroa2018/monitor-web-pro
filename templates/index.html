@@ -13,12 +13,19 @@
     table{width:100%;border-collapse:collapse;margin-top:10px;}
     th,td{padding:8px;border:1px solid #ccc;text-align:center;}
     th{background:#eee}
-    canvas{max-height:300px}
+    canvas{height:300px}
     #progressBar{width:100%;background:#eee;border-radius:4px;margin:10px 0;}
     #progress{height:20px;background:#4caf50;width:0%;border-radius:4px;transition:width .2s}
     select,button{padding:6px 10px;margin-right:6px}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    if (!window.Chart) {
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+      document.head.appendChild(s);
+    }
+  </script>
 </head>
 <body>
   <h1>Dashboard de Monitoreo</h1>
@@ -64,7 +71,7 @@
 
   <!-- GRÁFICO DE TIEMPOS DE RESPUESTA -->
   <div class="card">
-    <h2>Tiempo de respuesta (última hora)</h2>
+    <h2>Tiempo de respuesta (últimas 24h)</h2>
     <canvas id="responseChart"></canvas>
   </div>
 
@@ -138,7 +145,12 @@
           <td><button onclick="checkSiteNow('${url}')">Probar</button></td>
         `;
 
-        const series = await getSeries(url, 60);
+        let series = await getSeries(url, 1440);
+        if (!series || series.length === 0) {
+          const nowTs = new Date().toISOString();
+          const hasAvg = m && m.response && typeof m.response.avg === 'number' && m.response.avg > 0;
+          series = [{ time: nowTs, value: hasAvg ? m.response.avg : null, status: hasAvg ? 'up' : 'down' }];
+        }
         // recolectar labels (timestamps) únicos
         series.forEach(p => labelsSet.add(p.time));
         // mapas: up -> valor real, down -> 0ms
@@ -182,6 +194,7 @@
         data: { labels, datasets: chartDatasets },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           parsing: false,
           plugins: { legend: { position: 'bottom' } },
           scales: {
@@ -205,7 +218,7 @@
 
       for (const site of sites) {
         const url = site.url || site;
-        const series = await getSeries(url, 60);
+        const series = await getSeries(url, 1440);
         seriesByUrl[url] = series;
         series.forEach(p => labelsSet.add(p.time));
       }
@@ -256,7 +269,13 @@
     });
 
     // ---------- CARGA INICIAL ----------
-    loadAll();
+    (function startWhenReady(){
+      if (window.Chart && typeof Chart === 'function') {
+        loadAll();
+      } else {
+        setTimeout(startWhenReady, 200);
+      }
+    })();
   </script>
 </body>
 </html>
