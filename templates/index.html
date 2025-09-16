@@ -18,7 +18,7 @@
     #progress{height:20px;background:#4caf50;width:0%;border-radius:4px;transition:width .2s}
     select,button{padding:6px 10px;margin-right:6px}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <h1>Dashboard de Monitoreo</h1>
@@ -66,6 +66,7 @@
   <div class="card">
     <h2>Tiempo de respuesta (última hora)</h2>
     <canvas id="responseChart"></canvas>
+    <p id="noData" style="display:none;color:#777;margin-top:8px">No hay sitios configurados. Agrega uno para ver gráficos.</p>
   </div>
 
   <!-- BARRA ANIMADA (oculta por defecto) -->
@@ -117,6 +118,14 @@
       const sites = await getSites();
       const tbody = document.getElementById("sitesTable");
       tbody.innerHTML = "";
+      const noDataEl = document.getElementById("noData");
+      if (!sites || sites.length === 0) {
+        if (responseChart) { responseChart.destroy(); responseChart = null; }
+        if (noDataEl) noDataEl.style.display = "block";
+        return;
+      } else {
+        if (noDataEl) noDataEl.style.display = "none";
+      }
 
       // destruir gráfico anterior
       if (responseChart) responseChart.destroy();
