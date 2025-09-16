@@ -177,9 +177,9 @@
         }
         // recolectar labels (timestamps) únicos
         series.forEach(p => labelsSet.add(p.time));
-        // mapas: up -> valor real, down -> 0ms
+        // mapas: up -> valor real, down -> 1ms para que sea visible
         const mapUp = series.reduce((acc, p) => (acc[p.time] = (p.value ?? null), acc), {});
-        const mapDown = series.reduce((acc, p) => (acc[p.time] = (p.value == null ? 0 : null), acc), {});
+        const mapDown = series.reduce((acc, p) => (acc[p.time] = (p.value == null ? 1 : null), acc), {});
         datasets.push({
           label: `${url} (UP)`,
           data: mapUp,
@@ -209,18 +209,34 @@
         spanGaps: d.spanGaps,
         borderColor: d.borderColor,
         backgroundColor: d.backgroundColor,
-        pointRadius: 2
+        pointRadius: 3
       }));
+      // filtrar datasets sin valores numéricos
+      const hasVal = ds => ds.data.some(v => v !== null && !Number.isNaN(v));
+      const finalDatasets = chartDatasets.filter(hasVal);
+      if (finalDatasets.length === 0) {
+        finalDatasets.push({
+          label: 'Sin datos',
+          data: labels.map(() => 0),
+          borderWidth: 1,
+          spanGaps: false,
+          borderColor: '#999',
+          backgroundColor: 'rgba(0,0,0,0.05)',
+          pointRadius: 0
+        });
+      }
 
-      const ctx = document.getElementById("responseChart").getContext("2d");
+      const ctx = document.getElementById("responseChart");
       responseChart = new Chart(ctx, {
         type: "line",
-        data: { labels, datasets: chartDatasets },
+        data: { labels, datasets: finalDatasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          parsing: false,
-          plugins: { legend: { position: 'bottom' } },
+          animation: false,
+          elements: { point: { hitRadius: 10 } },
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: { legend: { position: 'bottom' }, tooltip: { intersect: false } },
           scales: {
             y: { beginAtZero: true, title: { display: true, text: 'ms' } },
             x: { ticks: { autoSkip: true, maxTicksLimit: 8 } }
@@ -257,7 +273,7 @@
         const urlBase = ds.label.replace(/ \(UP\)$| \(DOWN\)$/,'');
         const series = seriesByUrl[urlBase] || [];
         const mapUp = series.reduce((acc, p) => (acc[p.time] = (p.value ?? null), acc), {});
-        const mapDown = series.reduce((acc, p) => (acc[p.time] = (p.value == null ? 0 : null), acc), {});
+        const mapDown = series.reduce((acc, p) => (acc[p.time] = (p.value == null ? 1 : null), acc), {});
         const useMap = ds.label.endsWith('(DOWN)') ? mapDown : mapUp;
         return {
           ...ds,
@@ -265,8 +281,9 @@
         };
       });
 
+      const filtered = newDatasets.filter(ds => ds.data.some(v => v !== null && !Number.isNaN(v)));
       responseChart.data.labels = labels;
-      responseChart.data.datasets = newDatasets;
+      responseChart.data.datasets = filtered.length ? filtered : [{ label: 'Sin datos', data: labels.map(() => 0), borderWidth: 1, borderColor: '#999', backgroundColor: 'rgba(0,0,0,0.05)', pointRadius: 0 }];
       responseChart.update();
     }
 
