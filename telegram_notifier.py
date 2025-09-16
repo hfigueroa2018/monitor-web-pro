@@ -18,4 +18,5 @@ def send_telegram(message: str, chat_id: str = None) -> bool:
         return r.ok
     except Exception as e:
         print("Error enviando Telegram:", e)
+        print(f"[TELEGRAM] Enviando a {chat_id}: {message}")
         return False
