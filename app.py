@@ -54,8 +54,9 @@ def get_sites():
 @app.route("/add", methods=["POST"])
 def add_site():
     try:
-        url = (request.form.get("url") or (request.json and request.json.get("url")))
-        chat_ids_input = (request.form.get("chat_ids") or (request.json and request.json.get("chat_ids")))
+        data_json = request.get_json(silent=True) or {}
+        url = (request.form.get("url") or data_json.get("url"))
+        chat_ids_input = (request.form.get("chat_ids") or data_json.get("chat_ids"))
         if not url: abort(400, description="URL requerida")
         url = url.strip()
         if not url.startswith(("http://", "https://")): url = "https://" + url
