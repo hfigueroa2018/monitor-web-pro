@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, abort
 from flask_cors import CORS
-from metrics import uptime_range, incidents_range, response_time_stats
+from metrics import uptime_range, incidents_range, response_time_stats, response_time_series
 from uptime import uptime_percent
 from monitor import check_site
 from database import load_sites, save_sites
@@ -93,6 +93,16 @@ def metrics_data(url):
         "response": response_time_stats(url, days),
         "uptime_percent": uptime_percent(url)
     })
+
+# Nueva ruta: serie temporal de tiempos de respuesta (últimos N minutos)
+@app.route("/response-series/<path:url>")
+def response_series(url):
+    from urllib.parse import unquote
+    url = unquote(url)
+    minutes = int(request.args.get("minutes", 60))
+    if minutes <= 0 or minutes > 24*60:
+        minutes = 60
+    return jsonify(response_time_series(url, minutes))
 
 # ---------- ERRORES ----------
 @app.errorhandler(404)

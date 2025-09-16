@@ -75,10 +75,9 @@
   <p id="result"></p>
 
   <script>
-    // ---------- VARIABLE GLOBAL DEL GRÁFICO ----------
     let responseChart;
+    let refreshTimer;
 
-    // ---------- UTILS ----------
     async function getSites() {
       const res = await fetch("/sites");
       return res.ok ? res.json() : [];
@@ -87,6 +86,11 @@
       const res = await fetch(`/metrics/${encodeURIComponent(url)}?days=${days}`);
       return res.ok ? res.json() : { uptime: 0, incidents: 0, response: { avg: 0, min: 0, max: 0 } };
     }
+    async function getSeries(url, minutes = 60) {
+      const res = await fetch(`/response-series/${encodeURIComponent(url)}?minutes=${minutes}`);
+      return res.ok ? res.json() : [];
+    }
+
     async function checkSiteNow(url) {
       const bar = document.getElementById("progressBar");
       const prog = document.getElementById("progress");
@@ -114,14 +118,15 @@
       const tbody = document.getElementById("sitesTable");
       tbody.innerHTML = "";
 
-      // Destruye gráfico previo si existe
+      // destruir gráfico anterior
       if (responseChart) responseChart.destroy();
 
+      // construir datasets con series temporales
       const datasets = [];
-      const labels = ["Ahora"];   // puedes expandir después
+      let labelsSet = new Set();
 
       for (const site of sites) {
-        const url = site.url || site;          // ← clave: no muestra [object Object]
+        const url = site.url || site;
         const m   = await getMetrics(url, 1);
         const row = tbody.insertRow();
         row.innerHTML = `
@@ -132,20 +137,78 @@
           <td>${m.response.avg} ms</td>
           <td><button onclick="checkSiteNow('${url}')">Probar</button></td>
         `;
+
+        const series = await getSeries(url, 60);
+        // recolectar labels (timestamps) únicos
+        series.forEach(p => labelsSet.add(p.time));
+        // mapa rápido time->value
+        const map = series.reduce((acc, p) => (acc[p.time] = p.value, acc), {});
         datasets.push({
           label: url,
-          data: [m.response.avg],
-          fill: false,
-          tension: 0.1
+          data: map,
+          borderWidth: 2,
+          spanGaps: false,
         });
       }
+
+      // ordenar labels cronológicamente
+      const labels = Array.from(labelsSet).sort();
+
+      // convertir datasets.data (mapa) a arreglo alineado con labels
+      const chartDatasets = datasets.map(d => ({
+        label: d.label,
+        data: labels.map(ts => d.data[ts] ?? null),
+        borderWidth: d.borderWidth,
+        spanGaps: d.spanGaps,
+      }));
 
       const ctx = document.getElementById("responseChart");
       responseChart = new Chart(ctx, {
         type: "line",
-        data: { labels, datasets },
-        options: { responsive: true, scales: { y: { beginAtZero: true, title: { display: true, text: "ms" } } } }
+        data: { labels, datasets: chartDatasets },
+        options: {
+          responsive: true,
+          parsing: false,
+          plugins: { legend: { position: 'bottom' } },
+          scales: {
+            y: { beginAtZero: true, title: { display: true, text: 'ms' } },
+            x: { ticks: { autoSkip: true, maxTicksLimit: 8 } }
+          }
+        }
       });
+
+      // refresco automático del gráfico cada 30s
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(async () => {
+        await refreshChart();
+      }, 30000);
+    }
+
+    async function refreshChart() {
+      const sites = await getSites();
+      let labelsSet = new Set();
+      const seriesByUrl = {};
+
+      for (const site of sites) {
+        const url = site.url || site;
+        const series = await getSeries(url, 60);
+        seriesByUrl[url] = series;
+        series.forEach(p => labelsSet.add(p.time));
+      }
+      const labels = Array.from(labelsSet).sort();
+
+      const newDatasets = (responseChart.data.datasets || []).map(ds => {
+        const url = ds.label;
+        const map = (seriesByUrl[url] || []).reduce((acc, p) => (acc[p.time] = p.value, acc), {});
+        return {
+          ...ds,
+          data: labels.map(ts => map[ts] ?? null)
+        };
+      });
+
+      responseChart.data.labels = labels;
+      responseChart.data.datasets = newDatasets;
+      responseChart.update();
     }
 
     // ---------- CONFIG ----------
@@ -157,6 +220,7 @@
     document.getElementById("btnStop").onclick = async () => {
       await fetch("/config", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "action=stop&freq=60" });
       document.getElementById("status").textContent = "Detenido";
+      if (refreshTimer) clearInterval(refreshTimer);
     };
 
     // ---------- AGREGAR SITIO ----------
@@ -167,7 +231,7 @@
       const res = await fetch("/add", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `url=${encodeURIComponent(url)}` });
       if (res.ok) {
         document.getElementById("urlInput").value = "";
-        await loadAll();  // recarga tabla y gráfico
+        await loadAll();
       } else {
         alert("Error al agregar sitio");
       }

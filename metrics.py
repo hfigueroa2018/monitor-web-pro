@@ -67,3 +67,28 @@ def response_time_stats(url: str, days: int):
         "min": min(relevant),
         "max": max(relevant)
     }
+
+# Serie temporal de tiempos de respuesta (últimos N minutos)
+# Usa None para puntos con estado 'down' para que el gráfico muestre una brecha
+
+def response_time_series(url: str, minutes: int = 60):
+    data = load_metrics()
+    if url not in data or not data[url]:
+        return []
+    cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+    points = []
+    for entry in data[url]:
+        try:
+            t = datetime.fromisoformat(entry["time"])
+        except Exception:
+            continue
+        if t > cutoff:
+            val = entry["response_time_ms"] if entry.get("status") == "up" else None
+            points.append({
+                "time": entry["time"],
+                "value": val,
+                "status": entry.get("status", "unknown")
+            })
+    # Ordenar por tiempo ascendente
+    points.sort(key=lambda x: x["time"]) 
+    return points
