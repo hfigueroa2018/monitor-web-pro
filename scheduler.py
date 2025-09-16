@@ -19,6 +19,9 @@ def get_freq():
 # Memoria en RAM: último estado por URL
 last_status = {}
 
+# Bandera para indicar si es la primera vez que se revisa un sitio
+first_check = {}
+
 def run_monitor():
     while True:
         freq = get_freq()
@@ -30,12 +33,16 @@ def run_monitor():
                 ok = check_site(url)
                 status_key = "up" if ok else "down"
 
-                # Solo alertar si cambió a Down
-                if not ok and last_status.get(url) != "down":
-                    print(f"[SCHEDULER] Primera caída detectada para {url}")
+                # Alertar si cambió a Down o si es la primera vez que se detecta caída
+                if not ok and (last_status.get(url) != "down" or first_check.get(url) == True):
+                    print(f"[SCHEDULER] Estado Down detectado para {url}")
                     # La alerta ya la envía check_site(url)
+                    first_check[url] = False
 
                 last_status[url] = status_key
+                # Marcar como revisado al menos una vez
+                if url not in first_check:
+                    first_check[url] = True
             except Exception as e:
                 print(f"[SCHEDULER] Error revisando {url}: {e}")
 
