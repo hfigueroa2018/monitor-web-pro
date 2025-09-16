@@ -64,8 +64,10 @@
 
   <!-- GRÁFICO DE TIEMPOS DE RESPUESTA -->
   <div class="card">
-    <h2>Tiempo de respuesta (última hora)</h2>
-    <canvas id="responseChart"></canvas>
+    <h2>Tiempo de respuesta (última hora; si no hay datos, últimas 24h)</h2>
+    <div id="chartContainer" style="position:relative;height:320px">
+      <canvas id="responseChart"></canvas>
+    </div>
     <p id="noData" style="display:none;color:#777;margin-top:8px">No hay sitios configurados. Agrega uno para ver gráficos.</p>
   </div>
 
@@ -147,7 +149,10 @@
           <td><button onclick="checkSiteNow('${url}')">Probar</button></td>
         `;
 
-        let series = await getSeries(url, 1440);
+        let series = await getSeries(url, 60);
+        if (!series || series.length === 0) {
+          series = await getSeries(url, 1440);
+        }
         if (!series || series.length === 0) {
           const nowTs = new Date().toISOString();
           const hasAvg = m && m.response && typeof m.response.avg === 'number' && m.response.avg > 0;
@@ -190,12 +195,13 @@
         pointRadius: 2
       }));
 
-      const ctx = document.getElementById("responseChart");
+      const ctx = document.getElementById("responseChart").getContext("2d");
       responseChart = new Chart(ctx, {
         type: "line",
         data: { labels, datasets: chartDatasets },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           parsing: false,
           plugins: { legend: { position: 'bottom' } },
           scales: {
@@ -219,11 +225,15 @@
 
       for (const site of sites) {
         const url = site.url || site;
-        const series = await getSeries(url, 1440);
+        let series = await getSeries(url, 60);
+        if (!series || series.length === 0) {
+          series = await getSeries(url, 1440);
+        }
         seriesByUrl[url] = series;
         series.forEach(p => labelsSet.add(p.time));
       }
       const labels = Array.from(labelsSet).sort();
+      if (labels.length === 0) { return; }
 
       const newDatasets = (responseChart.data.datasets || []).map(ds => {
         // obtener URL base del label (quita sufijo " (UP)" o " (DOWN)")
