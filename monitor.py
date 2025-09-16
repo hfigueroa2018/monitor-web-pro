@@ -18,9 +18,8 @@ def check_site(url: str) -> bool:
         elapsed = int((time.time() - start) * 1000)
         print(f"[DEBUG] {url} -> status: {r.status_code}")
 
-        # Obtener chat_id del sitio si existe
         site_data = next((s for s in load_sites() if s["url"] == url), {})
-        chat_id = site_data.get("chat_id") or "5646679766"  # Fallback seguro
+        chat_id = site_data.get("chat_id") or "5646679766"
 
         if r.status_code in ALLOWED_CODES:
             print(f"✅ Online en {elapsed} ms")
@@ -32,14 +31,16 @@ def check_site(url: str) -> bool:
             record_check(url, False)
             record_metric(url, "down", 0)
             print(f"[DEBUG] Enviando alerta Telegram para {url} → chat_id: {chat_id}")
-            send_alert(f"⚠️  Alerta: {url} responde con código {r.status_code}", chat_id)
+            result = send_alert(f"Alerta: {url} responde con código {r.status_code}", chat_id)
+            print(f"[DEBUG] Resultado de Telegram: {result}")
             return False
     except Exception as e:
         print("❌ Fuera de línea")
         site_data = next((s for s in load_sites() if s["url"] == url), {})
-        chat_id = site_data.get("chat_id") or "5646679766"  # Fallback seguro
+        chat_id = site_data.get("chat_id") or "5646679766"
         record_check(url, False)
         record_metric(url, "down", 0)
         print(f"[DEBUG] Enviando alerta Telegram para {url} → chat_id: {chat_id}")
-        send_alert(f"❌ Alerta: {url} no responde. Error: {str(e)}", chat_id)
+        result = send_alert(f"Alerta: {url} no responde. Error: {str(e)}", chat_id)
+        print(f"[DEBUG] Resultado de Telegram: {result}")
         return False
