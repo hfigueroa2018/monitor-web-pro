@@ -115,30 +115,29 @@
       tbody.innerHTML = "";
 
       // Destruye gráfico previo si existe
-      if (responseChart) {
-        responseChart.destroy();
-      }
+      if (responseChart) responseChart.destroy();
 
       const datasets = [];
-      const labels = [];
+      const labels = ["Ahora"];   // puedes expandir después
+
       for (const site of sites) {
-        const m = await getMetrics(site, 1);
+        const url = site.url || site;          // ← clave: no muestra [object Object]
+        const m   = await getMetrics(url, 1);
         const row = tbody.insertRow();
         row.innerHTML = `
-          <td>${site}</td>
+          <td>${url}</td>
           <td class="${m.incidents ? 'down' : 'up'}">${m.incidents ? '❌ Down' : '✅ Up'}</td>
           <td>${m.uptime_percent}%</td>
           <td>${m.incidents}</td>
           <td>${m.response.avg} ms</td>
-          <td><button onclick="checkSiteNow('${site}')">Probar</button></td>
+          <td><button onclick="checkSiteNow('${encodeURIComponent(url)}')">Probar</button></td>
         `;
         datasets.push({
-          label: site,
+          label: url,
           data: [m.response.avg],
           fill: false,
           tension: 0.1
         });
-        if (labels.length === 0) labels.push("Ahora");
       }
 
       const ctx = document.getElementById("responseChart");
@@ -165,13 +164,7 @@
       e.preventDefault();
       const url = document.getElementById("urlInput").value.trim();
       if (!url) return;
-
-      const res = await fetch("/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `url=${encodeURIComponent(url)}`
-      });
-
+      const res = await fetch("/add", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `url=${encodeURIComponent(url)}` });
       if (res.ok) {
         document.getElementById("urlInput").value = "";
         await loadAll();  // recarga tabla y gráfico
