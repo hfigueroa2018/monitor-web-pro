@@ -18,14 +18,7 @@
     #progress{height:20px;background:#4caf50;width:0%;border-radius:4px;transition:width .2s}
     select,button{padding:6px 10px;margin-right:6px}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script>
-    if (!window.Chart) {
-      var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-      document.head.appendChild(s);
-    }
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <h1>Dashboard de Monitoreo</h1>
@@ -71,7 +64,7 @@
 
   <!-- GRÁFICO DE TIEMPOS DE RESPUESTA -->
   <div class="card">
-    <h2>Tiempo de respuesta (últimas 24h)</h2>
+    <h2>Tiempo de respuesta (última hora)</h2>
     <canvas id="responseChart"></canvas>
   </div>
 
@@ -194,7 +187,6 @@
         data: { labels, datasets: chartDatasets },
         options: {
           responsive: true,
-          maintainAspectRatio: false,
           parsing: false,
           plugins: { legend: { position: 'bottom' } },
           scales: {
@@ -269,13 +261,7 @@
     });
 
     // ---------- CARGA INICIAL ----------
-    (function startWhenReady(){
-      if (window.Chart && typeof Chart === 'function') {
-        loadAll();
-      } else {
-        setTimeout(startWhenReady, 200);
-      }
-    })();
+    loadAll();
   </script>
 </body>
 </html>

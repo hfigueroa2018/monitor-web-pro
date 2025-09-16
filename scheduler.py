@@ -48,10 +48,10 @@ def run_monitor():
                 prev = last_status.get(url)
                 # Enviar alerta solo en transición a DOWN
                 if status_key == "down" and prev != "down":
-                    chat_id = site.get("chat_id")
+                    chats = site.get("chat_ids") or site.get("chat_id")
                     msg = f"❌ {url} está DOWN"
-                    print(f"[SCHEDULER] Transición a DOWN, enviando alerta → chat_id={chat_id}")
-                    send_alert(msg, chat_id)
+                    print(f"[SCHEDULER] Transición a DOWN, enviando alerta → chats={chats}")
+                    send_alert(msg, chats)
 
                 last_status[url] = status_key
             except Exception as e:

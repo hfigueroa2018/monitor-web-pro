@@ -55,18 +55,64 @@ def get_sites():
 def add_site():
     try:
         url = (request.form.get("url") or (request.json and request.json.get("url")))
+        chat_ids_input = (request.form.get("chat_ids") or (request.json and request.json.get("chat_ids")))
         if not url: abort(400, description="URL requerida")
         url = url.strip()
         if not url.startswith(("http://", "https://")): url = "https://" + url
+
+        # parsear chat_ids (lista o texto separado por comas/semicolumnas)
+        def to_list(val):
+            if not val:
+                return []
+            if isinstance(val, list):
+                arr = val
+            else:
+                arr = [x.strip() for x in str(val).replace(";", ",").split(",")]
+            return [x for x in arr if x]
+        chat_ids = to_list(chat_ids_input)
+
         sites = load_sites()
         if any(s["url"] == url for s in sites):
             return jsonify({"status": "ok", "message": "Sitio ya existe"}), 200
-        sites.append({"url": url, "chat_id": None})  # chat_id opcional
+        sites.append({"url": url, "chat_id": None, "chat_ids": chat_ids})  # compat: chat_id opcional
         save_sites(sites)
         check_site(url)
-        return jsonify({"status": "ok", "message": "Sitio añadido y probado"})
+        return jsonify({"status": "ok", "message": "Sitio añadido y probado", "chat_ids": chat_ids})
     except Exception as e:
         import traceback; traceback.print_exc()
+        abort(500, description=str(e))
+
+# ---------- GESTIÓN DE CHATS TELEGRAM ----------
+@app.route("/set-chats", methods=["POST"])
+def set_chats():
+    try:
+        data = request.get_json(silent=True) or {}
+        url = (data.get("url") or request.form.get("url"))
+        chat_ids_input = (data.get("chat_ids") or request.form.get("chat_ids"))
+        if not url:
+            abort(400, description="URL requerida")
+        url = url.strip()
+        sites = load_sites()
+        def to_list(val):
+            if not val:
+                return []
+            if isinstance(val, list):
+                arr = val
+            else:
+                arr = [x.strip() for x in str(val).replace(";", ",").split(",")]
+            return [x for x in arr if x]
+        chat_ids = to_list(chat_ids_input)
+        found = False
+        for s in sites:
+            if s.get("url") == url:
+                s["chat_ids"] = chat_ids
+                found = True
+                break
+        if not found:
+            abort(404, description="Sitio no encontrado")
+        save_sites(sites)
+        return jsonify({"status": "ok", "chat_ids": chat_ids})
+    except Exception as e:
         abort(500, description=str(e))
 
 # ---------- CHEQUEO ----------
