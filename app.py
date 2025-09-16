@@ -6,9 +6,16 @@ from monitor import check_site
 from database import load_sites, save_sites
 import json
 import os
+import threading
+import time
+from scheduler import run_monitor
 
 app = Flask(__name__)
 CORS(app)
+
+# Iniciar el scheduler en un hilo separado cuando se inicia la aplicación
+monitor_thread = threading.Thread(target=run_monitor, daemon=True)
+monitor_thread.start()
 
 # ---------- RAÍZ ----------
 @app.route("/")
