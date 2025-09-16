@@ -1,30 +1,42 @@
 # scheduler.py
 import time
 import json
-import os
 from monitor import check_site
 from database import load_sites
+from notifier import send_alert
 
 CONFIG_FILE = "config.json"
 
-def get_freq():
+
+def read_config():
     try:
         with open(CONFIG_FILE, "r") as f:
             cfg = json.load(f)
-        return int(cfg.get("freq", 60))
+        # Defaults
+        return {
+            "freq": int(cfg.get("freq", 60)),
+            "action": cfg.get("action", "start"),
+        }
     except Exception as e:
         print("[SCHEDULER] Error leyendo config.json:", e)
-        return 60  # valor por defecto
+        return {"freq": 60, "action": "start"}
+
 
 # Memoria en RAM: último estado por URL
 last_status = {}
 
-# Bandera para indicar si es la primera vez que se revisa un sitio
-first_check = {}
 
 def run_monitor():
     while True:
-        freq = get_freq()
+        cfg = read_config()
+        freq = cfg["freq"]
+        action = cfg["action"]
+
+        if action == "stop":
+            print("[SCHEDULER] Pausado (action=stop)")
+            time.sleep(freq)
+            continue
+
         sites = load_sites()
         for site in sites:
             url = site["url"]
@@ -33,20 +45,20 @@ def run_monitor():
                 ok = check_site(url)
                 status_key = "up" if ok else "down"
 
-                # Alertar si cambió a Down o si es la primera vez que se detecta caída
-                if not ok and (last_status.get(url) != "down" or first_check.get(url) == True):
-                    print(f"[SCHEDULER] Estado Down detectado para {url}")
-                    # La alerta ya la envía check_site(url)
-                    first_check[url] = False
+                prev = last_status.get(url)
+                # Enviar alerta solo en transición a DOWN
+                if status_key == "down" and prev != "down":
+                    chat_id = site.get("chat_id")
+                    msg = f"❌ {url} está DOWN"
+                    print(f"[SCHEDULER] Transición a DOWN, enviando alerta → chat_id={chat_id}")
+                    send_alert(msg, chat_id)
 
                 last_status[url] = status_key
-                # Marcar como revisado al menos una vez
-                if url not in first_check:
-                    first_check[url] = True
             except Exception as e:
                 print(f"[SCHEDULER] Error revisando {url}: {e}")
 
         time.sleep(freq)
+
 
 if __name__ == "__main__":
     run_monitor()

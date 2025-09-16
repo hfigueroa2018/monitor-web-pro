@@ -16,6 +16,7 @@ CORS(app)
 # Iniciar el scheduler en un hilo separado cuando se inicia la aplicación
 monitor_thread = threading.Thread(target=run_monitor, daemon=True)
 monitor_thread.start()
+print("[APP] Scheduler iniciado en segundo plano")
 
 # ---------- RAÍZ ----------
 @app.route("/")
@@ -72,8 +73,11 @@ def add_site():
 @app.route("/check", methods=["POST"])
 def check_site_now():
     data = request.get_json()
-    if not data or "url" not in data: abort(400, description="URL no proporcionada")
-    ok = check_site(data["url"])
+    if not data or "url" not in data:
+        abort(400, description="URL no proporcionada")
+    from urllib.parse import unquote
+    url = unquote(data["url"]).strip()
+    ok = check_site(url)
     return jsonify({"status": "ok" if ok else "fail", "message": "Online" if ok else "Fallido"})
 
 # ---------- MÉTRICAS ----------

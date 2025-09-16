@@ -130,7 +130,7 @@
           <td>${m.uptime_percent}%</td>
           <td>${m.incidents}</td>
           <td>${m.response.avg} ms</td>
-          <td><button onclick="checkSiteNow('${encodeURIComponent(url)}')">Probar</button></td>
+          <td><button onclick="checkSiteNow('${url}')">Probar</button></td>
         `;
         datasets.push({
           label: url,
