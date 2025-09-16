@@ -1,4 +1,5 @@
 version: "3.8"
+
 services:
   web:
     build: .
@@ -7,3 +8,18 @@ services:
     env_file:
       - .env
     restart: always
+    volumes:
+      - ./sites.json:/app/sites.json
+      - ./metrics.json:/app/metrics.json
+      - ./uptime.json:/app/uptime.json
+
+  scheduler:
+    build: .
+    command: python scheduler.py
+    env_file:
+      - .env
+    restart: always
+    volumes:
+      - ./sites.json:/app/sites.json
+      - ./metrics.json:/app/metrics.json
+      - ./uptime.json:/app/uptime.json
