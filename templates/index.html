@@ -19,6 +19,19 @@
     #progressBar{width:100%;background:#eee;border-radius:4px;margin:10px 0;}
     #progress{height:20px;background:#4caf50;width:0%;border-radius:4px;transition:width .2s}
     select,button{padding:6px 10px;margin-right:6px}
+    :root{--bg:#f5f7fb;--card:#fff;--text:#333;--muted:#6b7280;--green:#2e7d32;--red:#c62828;--gray:#9ca3af;--shadow:0 2px 8px rgba(0,0,0,.06)}
+    body{background:var(--bg)}
+    .card{border:1px solid #e5e7eb;box-shadow:var(--shadow)}
+    .card h2{margin:0 0 10px;font-size:18px;color:#111827}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:16px 0 24px}
+    .kpi{background:var(--card);border-radius:10px;box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;border:1px solid #e5e7eb}
+    .kpi-title{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+    .kpi-value{font-size:28px;font-weight:700;margin-top:4px;color:#111827}
+    .kpi.up .kpi-value{color:var(--green)}
+    .kpi.down .kpi-value{color:var(--red)}
+    .kpi.unknown .kpi-value{color:var(--gray)}
+    table thead th{background:#f3f4f6;font-weight:600}
+    tbody tr:nth-child(odd){background:#fafafa}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
@@ -39,6 +52,25 @@
 </head>
 <body>
   <h1>Dashboard de Monitoreo</h1>
+
+  <div class="kpis">
+    <div class="kpi up">
+      <div class="kpi-title">Up</div>
+      <div class="kpi-value" id="kpiUp">0</div>
+    </div>
+    <div class="kpi down">
+      <div class="kpi-title">Down</div>
+      <div class="kpi-value" id="kpiDown">0</div>
+    </div>
+    <div class="kpi unknown">
+      <div class="kpi-title">Sin datos</div>
+      <div class="kpi-value" id="kpiUnknown">0</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-title">Disponibilidad 24h promedio</div>
+      <div class="kpi-value" id="kpiAvail">0%</div>
+    </div>
+  </div>
 
   <!-- CONFIGURACIÓN -->
   <div class="card">
@@ -110,6 +142,13 @@
       const res = await fetch(`/response-series/${encodeURIComponent(url)}?minutes=${minutes}`);
       return res.ok ? res.json() : [];
     }
+    function statusFromSeries(series){
+      if(!series||series.length===0) return 'unknown';
+      const last = series[series.length-1];
+      if(!last) return 'unknown';
+      if(typeof last.status === 'string') return last.status;
+      return (last.value==null)?'down':'up';
+    }
 
     async function checkSiteNow(url) {
       const bar = document.getElementById("progressBar");
@@ -138,9 +177,14 @@
       const tbody = document.getElementById("sitesTable");
       tbody.innerHTML = "";
       const noDataEl = document.getElementById("noData");
+      let upCount=0, downCount=0, unknownCount=0; let uptimeSum=0; let sitesCount=0;
       if (!sites || sites.length === 0) {
         if (responseChart) { responseChart.destroy(); responseChart = null; }
         if (noDataEl) noDataEl.style.display = "block";
+        document.getElementById('kpiUp').textContent = '0';
+        document.getElementById('kpiDown').textContent = '0';
+        document.getElementById('kpiUnknown').textContent = '0';
+        document.getElementById('kpiAvail').textContent = '0%';
         return;
       } else {
         if (noDataEl) noDataEl.style.display = "none";
@@ -166,10 +210,15 @@
           <td><button onclick="checkSiteNow('${url}')">Probar</button></td>
         `;
 
-        let series = await getSeries(url, 60);
-        if (!series || series.length === 0) {
-          series = await getSeries(url, 1440);
+        let seriesRaw = await getSeries(url, 60);
+        if (!seriesRaw || seriesRaw.length === 0) {
+          seriesRaw = await getSeries(url, 1440);
         }
+        const currStatus = statusFromSeries(seriesRaw);
+        if (currStatus === 'up') upCount++; else if (currStatus === 'down') downCount++; else unknownCount++;
+        uptimeSum += Number(m && m.uptime_percent ? m.uptime_percent : 0);
+        sitesCount++;
+        let series = seriesRaw;
         if (!series || series.length === 0) {
           const nowTs = new Date().toISOString();
           const hasAvg = m && m.response && typeof m.response.avg === 'number' && m.response.avg > 0;
@@ -201,6 +250,13 @@
           backgroundColor: 'rgba(198,40,40,0.2)'
         });
       }
+
+      // actualizar KPIs
+      document.getElementById('kpiUp').textContent = String(upCount);
+      document.getElementById('kpiDown').textContent = String(downCount);
+      document.getElementById('kpiUnknown').textContent = String(unknownCount);
+      const avgUptime = sitesCount>0 ? (uptimeSum/sitesCount).toFixed(1) : '0.0';
+      document.getElementById('kpiAvail').textContent = `${avgUptime}%`;
 
       // ordenar labels cronológicamente
       const labels = Array.from(labelsSet).sort();
