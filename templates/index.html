@@ -14,11 +14,28 @@
     th,td{padding:8px;border:1px solid #ccc;text-align:center;}
     th{background:#eee}
     canvas{height:300px}
+    #chartContainer{position:relative;height:320px;width:100%}
+    #responseChart{display:block;width:100% !important;height:100% !important}
     #progressBar{width:100%;background:#eee;border-radius:4px;margin:10px 0;}
     #progress{height:20px;background:#4caf50;width:0%;border-radius:4px;transition:width .2s}
     select,button{padding:6px 10px;margin-right:6px}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    window.__chartReady = (function() {
+      let resolved = false;
+      return new Promise((resolve) => {
+        function done() { if (!resolved) { resolved = true; resolve(); } }
+        if (window.Chart) return done();
+        const alt = document.createElement('script');
+        alt.src = 'https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js';
+        alt.onload = done;
+        alt.onerror = done;
+        document.head.appendChild(alt);
+        setTimeout(done, 2000);
+      });
+    })();
+  </script>
 </head>
 <body>
   <h1>Dashboard de Monitoreo</h1>
@@ -280,7 +297,12 @@
     });
 
     // ---------- CARGA INICIAL ----------
-    loadAll();
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (window.__chartReady) {
+        await window.__chartReady;
+      }
+      loadAll();
+    });
   </script>
 </body>
 </html>
