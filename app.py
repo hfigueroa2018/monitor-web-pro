@@ -83,6 +83,26 @@ def add_site():
         import traceback; traceback.print_exc()
         abort(500, description=str(e))
 
+# ---------- ELIMINAR SITIO ----------
+@app.route("/remove", methods=["POST"])
+def remove_site():
+    try:
+        data_json = request.get_json(silent=True) or {}
+        url = (request.form.get("url") or data_json.get("url"))
+        if not url:
+            abort(400, description="URL requerida")
+        url = url.strip()
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        sites = load_sites()
+        new_sites = [s for s in sites if s.get("url") != url]
+        if len(new_sites) == len(sites):
+            abort(404, description="Sitio no encontrado")
+        save_sites(new_sites)
+        return jsonify({"status": "ok", "message": "Sitio eliminado", "url": url})
+    except Exception as e:
+        abort(500, description=str(e))
+
 # ---------- GESTIÓN DE CHATS TELEGRAM ----------
 @app.route("/set-chats", methods=["POST"])
 def set_chats():
