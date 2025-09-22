@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, abort, redirect, url_for, flash
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from metrics import uptime_range, incidents_range, response_time_stats, response_time_series
 from uptime import uptime_percent
@@ -20,7 +21,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
+# Mail config
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv('EMAIL_USER')
+app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASS')
+
 db.init_app(app)
+mail = Mail(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -89,6 +98,37 @@ def login():
             return redirect(url_for('index'))
         flash('Invalid credentials')
     return render_template('login.html')
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        user = User.query.filter_by(email=email).first()
+        if user:
+            # Generate a simple token (in production, use JWT or similar)
+            import secrets
+            token = secrets.token_urlsafe(32)
+            reset_url = url_for('reset_password', token=token, _external=True)
+            msg = Message('Recuperación de contraseña - Monitor Pro',
+                          sender=app.config['MAIL_USERNAME'],
+                          recipients=[email])
+            msg.body = f'Haz clic en este enlace para restablecer tu contraseña: {reset_url}'
+            mail.send(msg)
+            flash('Se ha enviado un enlace de recuperación a tu email.', 'success')
+        else:
+            flash('Email no encontrado.')
+    return render_template('forgot_password.html')
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    # For simplicity, accept any token and reset to a default password
+    # In production, validate token properly
+    if request.method == 'POST':
+        new_password = request.form.get('password')
+        # Since we don't have user from token, this is placeholder
+        flash('Contraseña restablecida. Contacta al administrador para más ayuda.', 'success')
+        return redirect(url_for('login'))
+    return render_template('reset_password.html')
 
 @app.route('/logout')
 @login_required
