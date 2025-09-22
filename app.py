@@ -53,7 +53,7 @@ with app.app_context():
     db.create_all()
     migrate_existing_sites()
 
-monitor_thread = threading.Thread(target=run_monitor, daemon=True)
+monitor_thread = threading.Thread(target=lambda: run_monitor(app), daemon=True)
 monitor_thread.start()
 print("[APP] Scheduler iniciado en segundo plano")
 

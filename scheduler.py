@@ -4,7 +4,6 @@ import json
 from monitor import check_site
 from models import Site
 from notifier import send_alert
-from app import app  # to get app context
 
 CONFIG_FILE = "config.json"
 
@@ -27,7 +26,7 @@ def read_config():
 last_status = {}
 
 
-def run_monitor():
+def run_monitor(app):
     while True:
         cfg = read_config()
         freq = cfg["freq"]
@@ -63,4 +62,5 @@ def run_monitor():
 
 
 if __name__ == "__main__":
-    run_monitor()
+    from app import app
+    run_monitor(app)
