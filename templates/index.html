@@ -514,10 +514,17 @@
       for (const site of sites) {
         const url = site.url || site;
         const m   = await getMetrics(url, 1);
+        let tableSeries = await getSeries(url, 60);
+        if (!tableSeries || tableSeries.length === 0) {
+          tableSeries = await getSeries(url, 1440);
+        }
+        const tableStatus = statusFromSeries(tableSeries);
+        const statusText = tableStatus === 'up' ? '✅ Up' : tableStatus === 'down' ? '❌ Down' : '❓ Unknown';
+        const statusClass = tableStatus === 'up' ? 'up' : tableStatus === 'down' ? 'down' : 'unknown';
         const row = tbody.insertRow();
         row.innerHTML = `
           <td>${url}</td>
-          <td class="${m.incidents ? 'down' : 'up'}">${m.incidents ? '❌ Down' : '✅ Up'}</td>
+          <td class="${statusClass}">${statusText}</td>
           <td>${m.uptime_percent}%</td>
           <td>${m.incidents}</td>
           <td>${m.response.avg} ms</td>
