@@ -2,8 +2,9 @@
 import time
 import json
 from monitor import check_site
-from database import load_sites
+from models import Site
 from notifier import send_alert
+from app import app  # to get app context
 
 CONFIG_FILE = "config.json"
 
@@ -37,9 +38,10 @@ def run_monitor():
             time.sleep(freq)
             continue
 
-        sites = load_sites()
-        for site in sites:
-            url = site["url"]
+        with app.app_context():
+            db_sites = Site.query.all()
+        for site in db_sites:
+            url = site.url
             print(f"[SCHEDULER] Revisando {url}")
             try:
                 ok = check_site(url)
@@ -48,7 +50,7 @@ def run_monitor():
                 prev = last_status.get(url)
                 # Enviar alerta solo en transición a DOWN
                 if status_key == "down" and prev != "down":
-                    chats = site.get("chat_ids") or site.get("chat_id")
+                    chats = site.get_chat_ids()
                     msg = f"❌ {url} está DOWN"
                     print(f"[SCHEDULER] Transición a DOWN, enviando alerta → chats={chats}")
                     send_alert(msg, chats)

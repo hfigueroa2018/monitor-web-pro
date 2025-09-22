@@ -1,9 +1,12 @@
-from flask import Flask, render_template, request, jsonify, abort
+from flask import Flask, render_template, request, jsonify, abort, redirect, url_for, flash
 from flask_cors import CORS
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 from metrics import uptime_range, incidents_range, response_time_stats, response_time_series
 from uptime import uptime_percent
 from monitor import check_site
-from database import load_sites, save_sites
+from database import load_sites, save_sites  # keep for migration
+from models import db, User, Site
 import json
 import os
 import threading
@@ -13,13 +16,94 @@ from scheduler import run_monitor
 app = Flask(__name__)
 CORS(app)
 
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///monitor.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
+
+db.init_app(app)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+def migrate_existing_sites():
+    if Site.query.count() > 0:
+        return  # already migrated
+    sites = load_sites()
+    if not sites:
+        return
+    # Create default user if none
+    if User.query.count() == 0:
+        default_user = User(username='admin', email='admin@example.com', password_hash=generate_password_hash('admin'))
+        db.session.add(default_user)
+        db.session.commit()
+    user = User.query.first()
+    for site_data in sites:
+        site = Site(url=site_data['url'], user_id=user.id)
+        site.set_chat_ids(site_data.get('chat_ids', []))
+        db.session.add(site)
+    db.session.commit()
+
 # Iniciar el scheduler en un hilo separado cuando se inicia la aplicación
+with app.app_context():
+    db.create_all()
+    migrate_existing_sites()
+
 monitor_thread = threading.Thread(target=run_monitor, daemon=True)
 monitor_thread.start()
 print("[APP] Scheduler iniciado en segundo plano")
 
+# ---------- AUTH ----------
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+            return redirect(url_for('register'))
+        if User.query.filter_by(email=email).first():
+            flash('Email already exists')
+            return redirect(url_for('register'))
+        hashed = generate_password_hash(password)
+        user = User(username=username, email=email, password_hash=hashed)
+        db.session.add(user)
+        db.session.commit()
+        login_user(user)
+        return redirect(url_for('index'))
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)
+            return redirect(url_for('index'))
+        flash('Invalid credentials')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/profile')
+@login_required
+def profile():
+    return render_template('profile.html')
+
 # ---------- RAÍZ ----------
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
@@ -47,11 +131,13 @@ def config_json():
 
 # ---------- SITIOS ----------
 @app.route("/sites")
+@login_required
 def get_sites():
-    return jsonify(load_sites())
+    return jsonify([{'url': s.url, 'chat_ids': s.get_chat_ids()} for s in current_user.sites])
 
 # ---------- AÑADIR SITIO ----------
 @app.route("/add", methods=["POST"])
+@login_required
 def add_site():
     try:
         data_json = request.get_json(silent=True) or {}
@@ -72,11 +158,16 @@ def add_site():
             return [x for x in arr if x]
         chat_ids = to_list(chat_ids_input)
 
-        sites = load_sites()
-        if any(s["url"] == url for s in sites):
+        if len(current_user.sites) >= 3:
+            return jsonify({"status": "error", "message": "Maximum 3 sites allowed"}), 400
+
+        if Site.query.filter_by(url=url, user_id=current_user.id).first():
             return jsonify({"status": "ok", "message": "Sitio ya existe"}), 200
-        sites.append({"url": url, "chat_id": None, "chat_ids": chat_ids})  # compat: chat_id opcional
-        save_sites(sites)
+
+        site = Site(url=url, user_id=current_user.id)
+        site.set_chat_ids(chat_ids)
+        db.session.add(site)
+        db.session.commit()
         check_site(url)
         return jsonify({"status": "ok", "message": "Sitio añadido y probado", "chat_ids": chat_ids})
     except Exception as e:
@@ -85,6 +176,7 @@ def add_site():
 
 # ---------- ELIMINAR SITIO ----------
 @app.route("/remove", methods=["POST"])
+@login_required
 def remove_site():
     try:
         data_json = request.get_json(silent=True) or {}
@@ -94,17 +186,18 @@ def remove_site():
         url = url.strip()
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
-        sites = load_sites()
-        new_sites = [s for s in sites if s.get("url") != url]
-        if len(new_sites) == len(sites):
+        site = Site.query.filter_by(url=url, user_id=current_user.id).first()
+        if not site:
             abort(404, description="Sitio no encontrado")
-        save_sites(new_sites)
+        db.session.delete(site)
+        db.session.commit()
         return jsonify({"status": "ok", "message": "Sitio eliminado", "url": url})
     except Exception as e:
         abort(500, description=str(e))
 
 # ---------- GESTIÓN DE CHATS TELEGRAM ----------
 @app.route("/set-chats", methods=["POST"])
+@login_required
 def set_chats():
     try:
         data = request.get_json(silent=True) or {}
@@ -113,7 +206,6 @@ def set_chats():
         if not url:
             abort(400, description="URL requerida")
         url = url.strip()
-        sites = load_sites()
         def to_list(val):
             if not val:
                 return []
@@ -123,35 +215,38 @@ def set_chats():
                 arr = [x.strip() for x in str(val).replace(";", ",").split(",")]
             return [x for x in arr if x]
         chat_ids = to_list(chat_ids_input)
-        found = False
-        for s in sites:
-            if s.get("url") == url:
-                s["chat_ids"] = chat_ids
-                found = True
-                break
-        if not found:
+        site = Site.query.filter_by(url=url, user_id=current_user.id).first()
+        if not site:
             abort(404, description="Sitio no encontrado")
-        save_sites(sites)
+        site.set_chat_ids(chat_ids)
+        db.session.commit()
         return jsonify({"status": "ok", "chat_ids": chat_ids})
     except Exception as e:
         abort(500, description=str(e))
 
 # ---------- CHEQUEO ----------
 @app.route("/check", methods=["POST"])
+@login_required
 def check_site_now():
     data = request.get_json()
     if not data or "url" not in data:
         abort(400, description="URL no proporcionada")
     from urllib.parse import unquote
     url = unquote(data["url"]).strip()
+    site = Site.query.filter_by(url=url, user_id=current_user.id).first()
+    if not site:
+        abort(403, description="Not your site")
     ok = check_site(url)
     return jsonify({"status": "ok" if ok else "fail", "message": "Online" if ok else "Fallido"})
 
 # ---------- MÉTRICAS ----------
 @app.route("/metrics/<path:url>")
+@login_required
 def metrics_data(url):
     from urllib.parse import unquote
     url = unquote(url)
+    if not Site.query.filter_by(url=url, user_id=current_user.id).first():
+        abort(403)
     days = int(request.args.get("days", 1))
     if days <= 0 or days > 365: days = 1
     return jsonify({
@@ -163,9 +258,12 @@ def metrics_data(url):
 
 # Nueva ruta: serie temporal de tiempos de respuesta (últimos N minutos)
 @app.route("/response-series/<path:url>")
+@login_required
 def response_series(url):
     from urllib.parse import unquote
     url = unquote(url)
+    if not Site.query.filter_by(url=url, user_id=current_user.id).first():
+        abort(403)
     minutes = int(request.args.get("minutes", 60))
     if minutes <= 0 or minutes > 24*60:
         minutes = 60

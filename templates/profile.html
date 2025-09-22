@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Profile - Monitor Pro</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:40px;background:#f7f7f7;text-align:center;}
+    .card{background:#fff;padding:20px;border-radius:8px;display:inline-block;box-shadow:0 2px 4px rgba(0,0,0,.1);}
+    a{display:block;margin-top:10px;color:#007bff;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Profile</h1>
+    <p><strong>Username:</strong> {{ current_user.username }}</p>
+    <p><strong>Email:</strong> {{ current_user.email }}</p>
+    <p><strong>Sites monitored:</strong> {{ current_user.sites|length }}/3</p>
+    <a href="/">Back to Dashboard</a>
+    <a href="/logout">Logout</a>
+  </div>
+</body>
+</html>
