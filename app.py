@@ -294,7 +294,7 @@ def metrics_data(url):
         "uptime": uptime_range(site, days),
         "incidents": incidents_range(site, days),
         "response": response_time_stats(site, days),
-        "uptime_percent": uptime_percent(url)
+        "uptime_percent": uptime_percent(site)
     })
 
 # Nueva ruta: serie temporal de tiempos de respuesta (últimos N minutos)
