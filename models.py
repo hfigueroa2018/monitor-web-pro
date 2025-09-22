@@ -24,6 +24,8 @@ class Site(db.Model):
     chat_ids = db.Column(db.Text, default='[]')  # JSON list
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    metrics = db.relationship('Metric', backref='site', lazy=True)
+
     def get_chat_ids(self):
         try:
             return json.loads(self.chat_ids)
@@ -35,3 +37,13 @@ class Site(db.Model):
 
     def __repr__(self):
         return f'<Site {self.url}>'
+
+class Metric(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
+    time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    status = db.Column(db.String(10), nullable=False)  # 'up' or 'down'
+    response_time_ms = db.Column(db.Integer, nullable=True)
+
+    def __repr__(self):
+        return f'<Metric {self.site.url} {self.status} {self.time}>'

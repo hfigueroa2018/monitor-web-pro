@@ -208,7 +208,7 @@ def add_site():
         site.set_chat_ids(chat_ids)
         db.session.add(site)
         db.session.commit()
-        check_site(url)
+        check_site(site)
         return jsonify({"status": "ok", "message": "Sitio añadido y probado", "chat_ids": chat_ids})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -276,7 +276,7 @@ def check_site_now():
     site = Site.query.filter_by(url=url, user_id=current_user.id).first()
     if not site:
         abort(403, description="Not your site")
-    ok = check_site(url)
+    ok = check_site(site)
     return jsonify({"status": "ok" if ok else "fail", "message": "Online" if ok else "Fallido"})
 
 # ---------- MÉTRICAS ----------
@@ -285,14 +285,15 @@ def check_site_now():
 def metrics_data(url):
     from urllib.parse import unquote
     url = unquote(url)
-    if not Site.query.filter_by(url=url, user_id=current_user.id).first():
+    site = Site.query.filter_by(url=url, user_id=current_user.id).first()
+    if not site:
         abort(403)
     days = int(request.args.get("days", 1))
     if days <= 0 or days > 365: days = 1
     return jsonify({
-        "uptime": uptime_range(url, days),
-        "incidents": incidents_range(url, days),
-        "response": response_time_stats(url, days),
+        "uptime": uptime_range(site, days),
+        "incidents": incidents_range(site, days),
+        "response": response_time_stats(site, days),
         "uptime_percent": uptime_percent(url)
     })
 
@@ -302,12 +303,13 @@ def metrics_data(url):
 def response_series(url):
     from urllib.parse import unquote
     url = unquote(url)
-    if not Site.query.filter_by(url=url, user_id=current_user.id).first():
+    site = Site.query.filter_by(url=url, user_id=current_user.id).first()
+    if not site:
         abort(403)
     minutes = int(request.args.get("minutes", 60))
     if minutes <= 0 or minutes > 24*60:
         minutes = 60
-    return jsonify(response_time_series(url, minutes))
+    return jsonify(response_time_series(site, minutes))
 
 # ---------- ERRORES ----------
 @app.errorhandler(404)

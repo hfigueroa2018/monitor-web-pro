@@ -43,7 +43,7 @@ def run_monitor(app):
             url = site.url
             print(f"[SCHEDULER] Revisando {url}")
             try:
-                ok = check_site(url)
+                ok = check_site(site)
                 status_key = "up" if ok else "down"
 
                 prev = last_status.get(url)

@@ -1,94 +1,58 @@
-import json
-import time
+from models import db, Metric, Site
 from datetime import datetime, timedelta
 
-DB_METRICS = "metrics.json"
-
-def load_metrics():
-    try:
-        with open(DB_METRICS, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-def save_metrics(data):
-    with open(DB_METRICS, "w") as f:
-        json.dump(data, f, indent=2)
-
-def record_metric(url: str, status: str, response_time_ms: int):
-    data = load_metrics()
-    if url not in data:
-        data[url] = []
-    data[url].append({
-        "time": datetime.utcnow().isoformat(),
-        "status": status,
-        "response_time_ms": response_time_ms
-    })
-    # Mantener solo último año
+def record_metric(site, status: str, response_time_ms: int):
+    metric = Metric(site_id=site.id, status=status, response_time_ms=response_time_ms)
+    db.session.add(metric)
+    db.session.commit()
+    # Limpiar métricas antiguas (mantener último año)
     cutoff = datetime.utcnow() - timedelta(days=365)
-    data[url] = [x for x in data[url] if datetime.fromisoformat(x["time"]) > cutoff]
-    save_metrics(data)
+    old_metrics = Metric.query.filter(Metric.time < cutoff).delete()
+    db.session.commit()
 
-def uptime_range(url: str, days: int) -> float:
-    data = load_metrics()
-    if url not in data or not data[url]:
-        return 100.0
+def uptime_range(site, days: int) -> float:
     cutoff = datetime.utcnow() - timedelta(days=days)
-    relevant = [x for x in data[url] if datetime.fromisoformat(x["time"]) > cutoff]
-    if not relevant:
+    metrics = Metric.query.filter(Metric.site_id == site.id, Metric.time > cutoff).all()
+    if not metrics:
         return 100.0
-    ups = len([x for x in relevant if x["status"] == "up"])
-    return round((ups / len(relevant)) * 100, 2)
+    ups = len([m for m in metrics if m.status == "up"])
+    return round((ups / len(metrics)) * 100, 2)
 
-def incidents_range(url: str, days: int) -> int:
-    data = load_metrics()
-    if url not in data or not data[url]:
-        return 0
+def incidents_range(site, days: int) -> int:
     cutoff = datetime.utcnow() - timedelta(days=days)
-    relevant = [x for x in data[url] if datetime.fromisoformat(x["time"]) > cutoff]
+    metrics = Metric.query.filter(Metric.site_id == site.id, Metric.time > cutoff).order_by(Metric.time).all()
     downs = 0
     prev = "up"
-    for entry in relevant:
-        if entry["status"] == "down" and prev == "up":
+    for m in metrics:
+        if m.status == "down" and prev == "up":
             downs += 1
-        prev = entry["status"]
+        prev = m.status
     return downs
 
-def response_time_stats(url: str, days: int):
-    data = load_metrics()
-    if url not in data or not data[url]:
-        return {"avg": 0, "min": 0, "max": 0}
+def response_time_stats(site, days: int):
     cutoff = datetime.utcnow() - timedelta(days=days)
-    relevant = [x["response_time_ms"] for x in data[url] if datetime.fromisoformat(x["time"]) > cutoff and x["status"] == "up"]
-    if not relevant:
+    metrics = Metric.query.filter(Metric.site_id == site.id, Metric.time > cutoff, Metric.status == "up", Metric.response_time_ms.isnot(None)).all()
+    if not metrics:
         return {"avg": 0, "min": 0, "max": 0}
+    times = [m.response_time_ms for m in metrics]
     return {
-        "avg": round(sum(relevant) / len(relevant), 2),
-        "min": min(relevant),
-        "max": max(relevant)
+        "avg": round(sum(times) / len(times), 2),
+        "min": min(times),
+        "max": max(times)
     }
 
 # Serie temporal de tiempos de respuesta (últimos N minutos)
 # Usa None para puntos con estado 'down' para que el gráfico muestre una brecha
 
-def response_time_series(url: str, minutes: int = 60):
-    data = load_metrics()
-    if url not in data or not data[url]:
-        return []
+def response_time_series(site, minutes: int = 60):
     cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+    metrics = Metric.query.filter(Metric.site_id == site.id, Metric.time > cutoff).order_by(Metric.time).all()
     points = []
-    for entry in data[url]:
-        try:
-            t = datetime.fromisoformat(entry["time"])
-        except Exception:
-            continue
-        if t > cutoff:
-            val = entry["response_time_ms"] if entry.get("status") == "up" else None
-            points.append({
-                "time": entry["time"],
-                "value": val,
-                "status": entry.get("status", "unknown")
-            })
-    # Ordenar por tiempo ascendente
-    points.sort(key=lambda x: x["time"]) 
+    for m in metrics:
+        val = m.response_time_ms if m.status == "up" else None
+        points.append({
+            "time": m.time.isoformat(),
+            "value": val,
+            "status": m.status
+        })
     return points
